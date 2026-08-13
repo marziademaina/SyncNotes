@@ -1,0 +1,81 @@
+Project Rules
+Overview
+The exam consists of an oral discussion where students present a project of their choice, backed by a final report which must be submitted and validated before the discussion.
+
+Generally speaking, a project consists of a study, design and implementation effort requiring about 90 hours per person in total. A project may be designed and implemented by a group of cooperating students. The maximum size for a group is 3 people—4 people in exceptional and well-motivated cases. In this case, the required effort is expected to scale up linearly with the amount of students composing the group, which means about 90 * N hours, being N the amount of students in a group. In any case, a final report is expected to be produced for each project, (possibly) during its development. In case of a group project, the final report can be shared (i.e. unique) but it is required to explicitly state how the work was split among the members of the group. Finally, students will have to discuss their project in order for them to be assessed. Assessment is always individual, even in case of a group of students jointly participating to the same project.
+
+Students are expected to propose their project pro-actively either propose, possibly taking inspiration from past projects. To do so, they will have to open a new conversation on the Projects Forum. Since then, any discussion concerning the project must be held within that conversation—there including submission. Projects proposed by students need to be explicitly approved by one of the teachers in order for them to be considered valid. The teacher approving the project is usually the one that will supervise the work and assess it once it is over.
+
+Worker students, erasmus students, or students having some other sort of special need, may ask to renegotiate the terms of the examination. In this case, students can send a private email to andrea.omicini@unibo.it, adding all other teachers in copy.
+
+Procedure 1: Proposing a project
+Students —individually or as a group— reserve a project by opening a new forum conversation in the Projects Forum.
+
+A proposal should include:
+Vision: what you want to build, with system functionalities
+Learning goals: why it is relevant to the course and what you expect to learn
+Intended technologies and motivations
+Intended deliverables (app, library, presentation, etc.) besides the final report
+For software: usage scenarios
+Group members (names + email addresses)
+Any strict temporal constraints (e.g., graduation, work, internships, etc.)
+You may first post a rough idea, receive feedback, and refine it later.
+
+Naming convention
+Please stick to the following naming convention for the forum conversation title:
+
+[Location] [Surname1, Surname2, ..., SurnameN] Project proposal: <brief activity name>
+where Location is either Bologna or Cesena depending on the laurea programme ("corso di laurea") you are enrolled into:
+
+"Computer Science" →[Bologna]
+
+"Computer Science and Engineering" →[Cesena]
+
+Proposals must be explicitly accepted before continuing to Procedure 2.
+
+Notes
+Proposals may be asked for edits if a similar project has already been completed/reserved in current or past years. Check previous requests before submitting:
+
+APICe SD Projects along the years
+Projects Forum
+If your proposal is about some idea which is similar to an existing one, you may request a negotiation for a similar project.
+
+Procedure 2: Project design & development
+Projects must be properly designed and developed, with quality code tracked using a GitHub repository.
+
+Requirements and recommendations
+Students must have a GitHub account (preferably with a professional username).
+Prefer public repositories; if private, grant teachers access.
+Groups must use a structured workflow, such as:
+
+GitLab flow
+GitHub flow
+Students are encouraged to adopt test-driven and model-first methodologies.
+
+Use GitHub Issues for:
+
+discussing new ideas
+feature requests
+bug reports
+design discussions
+If technical or organizational issues arise, try to solve them independently before asking teachers for help (via GitHub issues or the forum).
+
+Procedure 3: Project submission & discussion
+Students must explicitly communicate their intention to discuss the project by posting in their project thread on the Projects Forum and by attaching the final report (PDF).
+
+Important: do not send the report via email, do not post it on the forum as a link to an external service (e.g., Google Drive, Dropbox, etc.): just attach it to the forum post as a PDF attachment.
+
+If the report is acceptable, the supervisor will propose a discussion date. Otherwise, improvements will be requested, and students must upload a new version without deleting previous ones.
+
+During discussion, the professor will:
+
+test understanding of the project and its relation to course topics
+evaluate individual knowledge and contribution in group projects
+briefly check report and code quality
+About the final report
+The final report must:
+
+be written in English
+be meaningful but concise (max ~50 pages)
+be produced in LaTeX, using the official template: https://github.com/unibo-fc-isi-ds/template-final-report
+Any variations must be approved in the Projects Forum.
