@@ -1,0 +1,37 @@
+Vision
+I propose to build SyncNotes, a collaborative note system with real-time synchronization, in which a set of shared files lives on a cluster of interchangeable server machines that constitute the only source of truth.
+
+Clients never talk to each other and never learn which machine is serving them: they address the cluster through a single logical endpoint, so replicas can be added, removed or restarted without reconfiguring anyone. What a client holds is always a provisional copy: a file becomes authoritative only after the servers have validated and agreed on it among themselves.
+
+A client downloads a file and edits it locally producing the new file and uploads it. Uploads from all clients enter a FIFO queue. On each pop, the server diffs the new file against the authoritative file. Where the two versions conflict, the server always wins, since its copy is the only one visible to every connected client. The validated result is committed and every subsequent download or edit starts from there.
+
+The system is composed of:
+- Client: lets users edit notes, keeps changes locally, uploads them and receives the outcome of the merge.
+- Gateway: the single logical entry point, it hides the cluster topology from clients and reroutes traffic when a machine becomes unavailable.
+- Server cluster (≥3 replicas): holds the set of authoritative files, serializes uploads through the FIFO queue, validates merges and replicates the resulting state.
+
+Learning goals
+This project addresses different challenges while keeping its core CP based:
+- Replication and synchronization: several server replicas hold the set of authoritative files and keep them aligned.
+- Consistency: all the clients operate on the same version of each authoritative file. All the servers share the same authoritative state and rule the state of the set of files.
+- Partition failure: servers reconcile the files and check their hashes every once in a while. If a file gets corrupted on a replica, that replica can retrieve the authoritative file from the other servers.
+- Fault tolerance: if a server goes offline while talking with a client, the client gets rerouted to another server.
+ 
+Intended technologies
+Programming language:
+- Client: Python
+- Server: Python
+- Database: SQL
+- Containerization: Docker
+
+Intended deliverables
+- Client application
+- Gateway service
+- Containerized server cluster 
+- docker-compose.yml running the whole system in a distributed environment
+- Scripts to inject node crashes and network partitions reproducibly
+- Final report
+
+Usage scenarios
+- Collaborative sessions where several clients edit the same notes at the same time: their changes are validated one at a time, in the order in which they arrive.
+- A server goes offline while a client is working with it: the client is rerouted to another server and keeps working.
