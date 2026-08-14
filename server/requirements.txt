@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+pydantic
+httpx
+pysyncobj==0.3.15
