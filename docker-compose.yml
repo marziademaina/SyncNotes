@@ -1,0 +1,60 @@
+services:
+  server-1:
+    build: ./server
+    environment:
+      REPLICA_ID: server-1
+      DB_PATH: /data/server.db
+      RAFT_SELF_ADDR: server-1:9000
+      RAFT_PEER_ADDRS: server-2:9000,server-3:9000
+      RAFT_JOURNAL_FILE: /data/raft.journal
+      RAFT_DUMP_FILE: /data/raft.dump
+    volumes:
+      - server1-data:/data
+    networks: [syncnotes]
+
+  server-2:
+    build: ./server
+    environment:
+      REPLICA_ID: server-2
+      DB_PATH: /data/server.db
+      RAFT_SELF_ADDR: server-2:9000
+      RAFT_PEER_ADDRS: server-1:9000,server-3:9000
+      RAFT_JOURNAL_FILE: /data/raft.journal
+      RAFT_DUMP_FILE: /data/raft.dump
+    volumes:
+      - server2-data:/data
+    networks: [syncnotes]
+
+  server-3:
+    build: ./server
+    environment:
+      REPLICA_ID: server-3
+      DB_PATH: /data/server.db
+      RAFT_SELF_ADDR: server-3:9000
+      RAFT_PEER_ADDRS: server-1:9000,server-2:9000
+      RAFT_JOURNAL_FILE: /data/raft.journal
+      RAFT_DUMP_FILE: /data/raft.dump
+    volumes:
+      - server3-data:/data
+    networks: [syncnotes]
+
+  gateway:
+    build: ./gateway
+    environment:
+      PRIMARY_URL: http://server-1:8000
+      REPLICA_URLS: http://server-1:8000,http://server-2:8000,http://server-3:8000
+    ports:
+      - "8080:8080"
+    depends_on:
+      - server-1
+      - server-2
+      - server-3
+    networks: [syncnotes]
+
+volumes:
+  server1-data:
+  server2-data:
+  server3-data:
+
+networks:
+  syncnotes:
