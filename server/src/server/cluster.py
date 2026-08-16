@@ -11,8 +11,10 @@ class NotesStore(SyncObj):
         super().__init__(self_addr, other_addrs, conf)
 
     @replicated
-    def commit_upload(self, op_id: str, name: str, content: str, updated_at_iso: str) -> dict:
-        return commit_write(op_id, name, content, datetime.fromisoformat(updated_at_iso))
+    def commit_upload(
+        self, op_id: str, name: str, content: str, updated_at_iso: str, base_version: int | None = None
+    ) -> dict:
+        return commit_write(op_id, name, content, datetime.fromisoformat(updated_at_iso), base_version)
 
 
 TIMEOUT_FAIL_REASON = -1
@@ -34,6 +36,19 @@ async def call_replicated(loop: asyncio.AbstractEventLoop, method, *args, timeou
 def _resolve(future: asyncio.Future, result, error) -> None:
     if not future.done():
         future.set_result((result, error))
+
+
+def leader_http_url(store: SyncObj, self_raft_addr: str, http_port: str) -> str | None:
+    leader = store.getStatus()["leader"]
+    if leader is None:
+        return None
+
+    leader_raft_addr = str(leader)
+    if leader_raft_addr == self_raft_addr:
+        return None
+
+    host = leader_raft_addr.rsplit(":", 1)[0]
+    return f"http://{host}:{http_port}"
 
 
 def fail_reason_name(code: int) -> str:

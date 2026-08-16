@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from typing import Callable
 
 import httpx
 
@@ -50,9 +51,12 @@ async def reconcile_with_peer(peer_url: str) -> list[str]:
     return fixed
 
 
-async def reconciliation_loop(peer_url: str, interval_seconds: float) -> None:
+async def reconciliation_loop(get_peer_url: Callable[[], str | None], interval_seconds: float) -> None:
     while True:
         await asyncio.sleep(interval_seconds)
+        peer_url = get_peer_url()
+        if peer_url is None:
+            continue
         try:
             await reconcile_with_peer(peer_url)
         except httpx.HTTPError as exc:
