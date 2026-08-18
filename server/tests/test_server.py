@@ -69,3 +69,44 @@ def test_manifest_reflects_local_files(client):
     assert response.status_code == 200
     body = response.json()
     assert body["notes.md"]["version"] == 1
+
+
+def test_second_upload_without_base_version_is_conservative_and_keeps_server_content(client):
+    # No base_version means the server can't tell which part of the upload is
+    # a genuine edit vs. a stale copy, so the whole upload is treated as one
+    # conflict and the existing authoritative content wins.
+    client.post("/files/notes.md", json={"content": "v1"})
+    second = client.post("/files/notes.md", json={"content": "v2"})
+    assert second.status_code == 200
+    assert second.json()["content"] == "v1"
+
+
+def test_upload_with_correct_base_version_applies_cleanly(client):
+    first = client.post("/files/notes.md", json={"content": "line1\nline2\nline3\n"})
+    base_version = first.json()["version"]
+
+    second = client.post(
+        "/files/notes.md", json={"content": "line1\nline2-edited\nline3\n", "base_version": base_version}
+    )
+
+    assert second.status_code == 200
+    assert second.json()["content"] == "line1\nline2-edited\nline3\n"
+
+
+def test_two_clients_editing_disjoint_lines_from_the_same_base_both_survive(client):
+    base = client.post("/files/notes.md", json={"content": "line1\nline2\nline3\n"})
+    base_version = base.json()["version"]
+
+    client_a = client.post(
+        "/files/notes.md", json={"content": "line1\nA-edit\nline3\n", "base_version": base_version}
+    )
+    assert client_a.json()["content"] == "line1\nA-edit\nline3\n"
+
+    # client_b started from the same base_version, unaware that client_a's
+    # write already landed and changed line2.
+    client_b = client.post(
+        "/files/notes.md", json={"content": "line1\nline2\nB-edit\n", "base_version": base_version}
+    )
+
+    assert client_b.status_code == 200
+    assert client_b.json()["content"] == "line1\nA-edit\nB-edit\n"

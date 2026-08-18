@@ -36,6 +36,14 @@ class AppliedOperation(Base):
     op_id: Mapped[str] = mapped_column(String, primary_key=True)
 
 
+class FileVersion(Base):
+    __tablename__ = "file_versions"
+
+    name: Mapped[str] = mapped_column(String, primary_key=True)
+    version: Mapped[int] = mapped_column(Integer, primary_key=True)
+    content: Mapped[str] = mapped_column(Text)
+
+
 def init_db() -> None:
     Base.metadata.create_all(engine)
 
@@ -73,7 +81,7 @@ def apply_if_newer(
         session.close()
 
 
-def commit_write(op_id: str, name: str, content: str, updated_at: datetime) -> dict:
+def commit_write(op_id: str, name: str, content: str, updated_at: datetime, base_version: int | None = None) -> dict:
     session = get_session()
     try:
         existing = session.get(FileRecord, name)
@@ -82,8 +90,13 @@ def commit_write(op_id: str, name: str, content: str, updated_at: datetime) -> d
 
         session.add(AppliedOperation(op_id=op_id))
 
+        base_content = None
+        if base_version is not None:
+            base_record = session.get(FileVersion, (name, base_version))
+            base_content = base_record.content if base_record is not None else None
+
         version = (existing.version + 1) if existing else 1
-        merged_content = resolve_conflict(existing.content if existing else None, content)
+        merged_content = resolve_conflict(base_content, existing.content if existing else None, content)
         content_hash = hashlib.sha256(merged_content.encode()).hexdigest()
 
         if existing:
@@ -97,6 +110,8 @@ def commit_write(op_id: str, name: str, content: str, updated_at: datetime) -> d
                 name=name, version=version, content=merged_content, content_hash=content_hash, updated_at=updated_at
             )
             session.add(record)
+
+        session.add(FileVersion(name=name, version=version, content=merged_content))
 
         session.commit()
         session.refresh(record)
