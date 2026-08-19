@@ -2,6 +2,7 @@ import argparse
 import sys
 
 from client.api import download_file, upload_file
+from client.sync_state import read_base_version, write_state
 
 DEFAULT_GATEWAY = "http://localhost:8080"
 
@@ -26,14 +27,20 @@ def main() -> None:
         if args.out:
             with open(args.out, "w") as f:
                 f.write(result["content"])
+            write_state(args.out, args.name, result["version"])
             print(f"saved {args.name} (version {result['version']}) to {args.out}")
         else:
             sys.stdout.write(result["content"])
     elif args.command == "upload":
         with open(args.path) as f:
             content = f.read()
-        result = upload_file(args.gateway, args.name, content)
-        print(f"uploaded {args.name}: now version {result['version']} ({result['content_hash'][:12]})")
+
+        base_version = read_base_version(args.path, args.name)
+        result = upload_file(args.gateway, args.name, content, base_version)
+        write_state(args.path, args.name, result["version"])
+
+        note = " (server merged in changes since your last download)" if result["content"] != content else ""
+        print(f"uploaded {args.name}: now version {result['version']} ({result['content_hash'][:12]}){note}")
 
 
 if __name__ == "__main__":

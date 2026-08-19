@@ -7,7 +7,8 @@ def download_file(gateway_url: str, name: str) -> dict:
     return response.json()
 
 
-def upload_file(gateway_url: str, name: str, content: str) -> dict:
-    response = requests.post(f"{gateway_url}/files/{name}", json={"content": content}, timeout=10)
+def upload_file(gateway_url: str, name: str, content: str, base_version: int | None = None) -> dict:
+    body = {"content": content, "base_version": base_version}
+    response = requests.post(f"{gateway_url}/files/{name}", json=body, timeout=10)
     response.raise_for_status()
     return response.json()
