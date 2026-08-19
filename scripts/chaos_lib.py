@@ -1,11 +1,3 @@
-"""Shared helpers for the chaos-injection scripts in this directory.
-
-Each script brings the full docker-compose cluster up from a clean slate,
-injects one specific kind of fault, asserts that the system recovers the way
-propose.txt promises, and tears the cluster back down (success or failure) --
-so every run is self-contained and reproducible.
-"""
-
 import json
 import subprocess
 import sys

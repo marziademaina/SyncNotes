@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
-"""Chaos scenario: kill the current Raft leader outright and verify the
-gateway automatically reroutes writes to the newly elected leader with no
-manual reconfiguration -- the "a server goes offline while a client is
-working with it" / fault-tolerance scenario from propose.txt.
 
-Usage: python scripts/chaos_kill_leader.py
-"""
 import subprocess
 
 from chaos_lib import (

@@ -1,16 +1,5 @@
 #!/usr/bin/env python3
-"""Chaos scenario: network-partition one follower away from the rest of the
-cluster (docker network disconnect -- the replica keeps running, it just
-can't talk to anyone) and verify:
 
-  - the majority side keeps serving reads/writes through the gateway;
-  - the isolated replica, alone, does NOT keep claiming quorum (no split
-    brain -- this is the "core CP" guarantee propose.txt asks for);
-  - once the partition heals, the isolated replica rejoins and converges
-    back to the latest authoritative content.
-
-Usage: python scripts/chaos_network_partition.py
-"""
 import subprocess
 
 from chaos_lib import (

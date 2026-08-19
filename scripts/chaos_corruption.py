@@ -1,15 +1,5 @@
 #!/usr/bin/env python3
-"""Chaos scenario: corrupt a follower's on-disk content directly (bit rot --
-content changes, stored hash column doesn't), bypassing Raft entirely, and
-verify reconciliation's hash self-check (propose.txt: "servers reconcile the
-files and check their hashes every once in a while") detects and repairs it.
 
-Deliberately targets a FOLLOWER, not the leader: reconciliation only pulls
-from "the leader" as the trusted source, so a corrupted leader has no
-mechanism today to detect or repair itself -- see README's known gaps.
-
-Usage: python scripts/chaos_corruption.py
-"""
 from chaos_lib import (
     SERVERS,
     compose_down,
