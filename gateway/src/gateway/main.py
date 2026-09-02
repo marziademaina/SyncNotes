@@ -37,7 +37,7 @@ async def health() -> dict:
     return {"status": "ok", "replicas": REPLICA_URLS, "leader": leader}
 
 
-async def _forward_to_leader(method: str, name: str, json_body: dict | None) -> dict:
+async def _forward_to_leader(method: str, path: str, json_body: dict | None) -> dict | list:
     async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as http_client:
         last_error = "no cluster leader available"
         for _ in range(2):
@@ -46,7 +46,7 @@ async def _forward_to_leader(method: str, name: str, json_body: dict | None) -> 
                 continue
 
             try:
-                response = await http_client.request(method, f"{leader}/files/{name}", json=json_body)
+                response = await http_client.request(method, f"{leader}{path}", json=json_body)
             except httpx.RequestError as exc:
                 last_error = f"leader {leader} unreachable: {exc}"
                 continue
@@ -61,11 +61,16 @@ async def _forward_to_leader(method: str, name: str, json_body: dict | None) -> 
     raise HTTPException(status_code=503, detail=last_error)
 
 
+@app.get("/files")
+async def list_notes() -> list:
+    return await _forward_to_leader("GET", "/files", None)
+
+
 @app.get("/files/{name}")
 async def download(name: str) -> dict:
-    return await _forward_to_leader("GET", name, None)
+    return await _forward_to_leader("GET", f"/files/{name}", None)
 
 
 @app.post("/files/{name}")
 async def upload(name: str, body: dict) -> dict:
-    return await _forward_to_leader("POST", name, body)
+    return await _forward_to_leader("POST", f"/files/{name}", body)

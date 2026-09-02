@@ -49,6 +49,26 @@ def test_download_is_routed_to_the_leader(gateway_app, mock_async_client):
     assert response.json()["content"] == "hello"
 
 
+def test_list_notes_is_routed_to_the_leader(gateway_app, mock_async_client):
+    main_module = gateway_app("http://server-1:8000,http://server-2:8000,http://server-3:8000")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/health":
+            return httpx.Response(200, json={"status": "ok", "leader": "server-2:9000"})
+        assert request.url.path == "/files"
+        assert request.url.host == "server-2"
+        return httpx.Response(200, json=[{"name": "notes.md", "version": 1, "content_hash": "h1", "updated_at": "2026-01-01T00:00:00Z"}])
+
+    mock_async_client(handler)
+
+    with TestClient(main_module.app) as client:
+        response = client.get("/files")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body == [{"name": "notes.md", "version": 1, "content_hash": "h1", "updated_at": "2026-01-01T00:00:00Z"}]
+
+
 def test_upload_is_routed_to_the_leader(gateway_app, mock_async_client):
     main_module = gateway_app("http://server-1:8000,http://server-2:8000,http://server-3:8000")
 
