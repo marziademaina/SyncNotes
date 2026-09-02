@@ -1,6 +1,12 @@
 import requests
 
 
+def list_files(gateway_url: str) -> list[dict]:
+    response = requests.get(f"{gateway_url}/files", timeout=10)
+    response.raise_for_status()
+    return response.json()
+
+
 def download_file(gateway_url: str, name: str) -> dict:
     response = requests.get(f"{gateway_url}/files/{name}", timeout=10)
     response.raise_for_status()

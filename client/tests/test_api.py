@@ -14,6 +14,21 @@ class _FakeResponse:
             raise RuntimeError(f"HTTP {self.status_code}")
 
 
+def test_list_files_calls_the_expected_url(monkeypatch):
+    captured = {}
+
+    def fake_get(url, timeout):
+        captured["url"] = url
+        return _FakeResponse([{"name": "notes.md", "version": 1, "content_hash": "h1", "updated_at": "2026-01-01"}])
+
+    monkeypatch.setattr(api.requests, "get", fake_get)
+
+    result = api.list_files("http://gateway")
+
+    assert captured["url"] == "http://gateway/files"
+    assert result == [{"name": "notes.md", "version": 1, "content_hash": "h1", "updated_at": "2026-01-01"}]
+
+
 def test_download_file_calls_the_expected_url(monkeypatch):
     captured = {}
 
