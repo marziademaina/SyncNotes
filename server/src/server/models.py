@@ -16,6 +16,13 @@ class FileResponse(BaseModel):
     updated_at: datetime
 
 
+class FileSummary(BaseModel):
+    name: str
+    version: int
+    content_hash: str
+    updated_at: datetime
+
+
 class HealthResponse(BaseModel):
     status: str
     replica_id: str

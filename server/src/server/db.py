@@ -139,6 +139,23 @@ def list_files() -> dict[str, dict]:
         session.close()
 
 
+def list_files_summary() -> list[dict]:
+    session = get_session()
+    try:
+        records = session.scalars(select(FileRecord).order_by(FileRecord.name)).all()
+        return [
+            {
+                "name": r.name,
+                "version": r.version,
+                "content_hash": r.content_hash,
+                "updated_at": r.updated_at.isoformat(),
+            }
+            for r in records
+        ]
+    finally:
+        session.close()
+
+
 def find_locally_corrupted_files() -> set[str]:
     session = get_session()
     try:

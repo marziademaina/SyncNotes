@@ -63,6 +63,25 @@ def test_second_upload_increments_version(client):
     assert second.json()["version"] == 2
 
 
+def test_list_notes_is_empty_before_any_upload(client):
+    response = client.get("/files")
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_list_notes_reflects_uploaded_files(client):
+    client.post("/files/notes.md", json={"content": "hello"})
+
+    response = client.get("/files")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["name"] == "notes.md"
+    assert body[0]["version"] == 1
+    assert "content" not in body[0]
+
+
 def test_manifest_reflects_local_files(client):
     client.post("/files/notes.md", json={"content": "hello"})
     response = client.get("/internal/manifest")
@@ -72,9 +91,6 @@ def test_manifest_reflects_local_files(client):
 
 
 def test_second_upload_without_base_version_is_conservative_and_keeps_server_content(client):
-    # No base_version means the server can't tell which part of the upload is
-    # a genuine edit vs. a stale copy, so the whole upload is treated as one
-    # conflict and the existing authoritative content wins.
     client.post("/files/notes.md", json={"content": "v1"})
     second = client.post("/files/notes.md", json={"content": "v2"})
     assert second.status_code == 200

@@ -48,6 +48,32 @@ def test_apply_with_force_overwrites_even_when_version_and_hash_match(local_db):
     session.close()
 
 
+def test_list_files_summary_is_empty_with_no_files(local_db):
+    assert local_db.list_files_summary() == []
+
+
+def test_list_files_summary_reports_name_version_hash_and_updated_at(local_db):
+    local_db.apply_if_newer("notes.md", 1, "hello", "h1")
+
+    summary = local_db.list_files_summary()
+
+    assert len(summary) == 1
+    entry = summary[0]
+    assert entry["name"] == "notes.md"
+    assert entry["version"] == 1
+    assert entry["content_hash"] == "h1"
+    assert "updated_at" in entry
+
+
+def test_list_files_summary_is_sorted_by_name(local_db):
+    local_db.apply_if_newer("zzz.md", 1, "z", "hz")
+    local_db.apply_if_newer("aaa.md", 1, "a", "ha")
+
+    names = [entry["name"] for entry in local_db.list_files_summary()]
+
+    assert names == ["aaa.md", "zzz.md"]
+
+
 def test_find_locally_corrupted_files_detects_content_hash_mismatch(local_db):
     import hashlib
 
