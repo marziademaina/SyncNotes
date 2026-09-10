@@ -16,11 +16,6 @@ def run(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
 
 
 def run_cli(*args: str, cwd: Path) -> str:
-    """Invoke the real `client.cli` entry point (not a raw HTTP call) against
-    the gateway, from `cwd` -- so a downloaded file and its .syncnotes.json
-    sidecar land in a specific "user's" directory, the way an actual person
-    running the CLI on their machine would see it.
-    """
     import os
 
     env = dict(os.environ, PYTHONPATH=str(REPO_ROOT / "client" / "src"))
@@ -93,6 +88,19 @@ def get_file(replica: str, name: str) -> dict | None:
     return json.loads(out) if out else None
 
 
+def db_files(replica: str) -> list[dict] | None:
+    script = (
+        "import sqlite3, json\n"
+        "con = sqlite3.connect('/data/server.db')\n"
+        "rows = con.execute("
+        "'SELECT name, version, content_hash, content, deleted FROM files ORDER BY name').fetchall()\n"
+        "print(json.dumps([{'name': r[0], 'version': r[1], 'content_hash': r[2], "
+        "'content': r[3], 'deleted': bool(r[4])} for r in rows]))\n"
+    )
+    out = _exec_python(replica, script)
+    return json.loads(out) if out else None
+
+
 def trigger_reconcile(replica: str) -> dict | None:
     out = _exec_python(
         replica,
@@ -104,10 +112,6 @@ def trigger_reconcile(replica: str) -> dict | None:
 
 
 def corrupt_content(replica: str, name: str, bad_content: str) -> None:
-    """Overwrite a file's content directly in a replica's SQLite DB, bypassing
-    Raft entirely -- the storage-level bit-rot scenario reconciliation exists
-    for. The stored hash is deliberately left untouched.
-    """
     script = (
         "from server.db import get_session, FileRecord\n"
         "s = get_session()\n"
@@ -130,6 +134,12 @@ def gateway_post(name: str, content: str, base_version: int | None = None) -> di
 
 def gateway_get(name: str) -> dict:
     with urllib.request.urlopen(f"{GATEWAY_URL}/files/{name}", timeout=10) as resp:
+        return json.loads(resp.read())
+
+
+def gateway_delete(name: str) -> dict:
+    req = urllib.request.Request(f"{GATEWAY_URL}/files/{name}", method="DELETE")
+    with urllib.request.urlopen(req, timeout=10) as resp:
         return json.loads(resp.read())
 
 

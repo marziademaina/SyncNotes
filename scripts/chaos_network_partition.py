@@ -58,9 +58,6 @@ def main() -> None:
             h = health(victim)
             return h is not None and not h.get("has_quorum")
 
-        # TCP takes a moment to notice the socket is gone; has_quorum only
-        # flips once the isolated node's own connection count drops below a
-        # majority, not the instant the network is cut.
         wait_until(
             isolated_replica_lost_quorum, timeout=30.0, description=f"{victim} detects it has lost quorum (no split brain)"
         )
