@@ -313,8 +313,11 @@ def _draw_menu(stdscr, gateway: str, user: str, notes: list[dict], selected: int
 
 def _prompt_name(stdscr) -> str | None:
     max_y, max_x = stdscr.getmaxyx()
-    prompt = "New note name (Enter to confirm, empty to cancel): "
+    hint = "no '/' '\\' or leading '.'  -  add '.md' yourself if you want it"
+    prompt = "New note name (empty to cancel): "
     row = max_y - 1
+    _safe_addstr(stdscr, row - 1, 0, " " * max(max_x - 1, 0))
+    _safe_addstr(stdscr, row - 1, 0, hint[: max(max_x - 1, 0)], curses.A_DIM)
     _safe_addstr(stdscr, row, 0, " " * max(max_x - 1, 0))
     _safe_addstr(stdscr, row, 0, prompt)
     stdscr.refresh()
@@ -368,12 +371,8 @@ def _invalid_note_name_reason(name: str) -> str | None:
     if name.startswith("."):
         return "can't start with '.'"
     if any(ch in _ILLEGAL_NAME_CHARS or ord(ch) < 32 for ch in name):
-        return "has an unsupported character" 
+        return "has an unsupported character"
     return None
-
-
-def _is_valid_note_name(name: str) -> bool:
-    return _invalid_note_name_reason(name) is None
 
 
 def _edit_note_flow(stdscr, gateway: str, sync_dir: Path, user: str, name: str, live: _LiveNotes) -> str:

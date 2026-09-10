@@ -5,6 +5,10 @@ import requests
 import client.tui as tui
 
 
+def _is_valid_note_name(name: str) -> bool:
+    return tui._invalid_note_name_reason(name) is None
+
+
 class _FakePromptWindow:
 
     def __init__(self, getstr_return: bytes = b"my-note.md"):
@@ -90,7 +94,7 @@ def test_prompt_name_returns_whitespace_only_input_as_is_rather_than_cancelling(
 
     assert name == ""
     assert name is not None
-    assert not tui._is_valid_note_name(name)
+    assert not _is_valid_note_name(name)
 
 
 def test_default_user_falls_back_to_os_username(monkeypatch):
@@ -107,40 +111,40 @@ def test_default_user_falls_back_to_a_placeholder_when_unavailable(monkeypatch):
 
 
 def test_valid_note_names_are_accepted():
-    assert tui._is_valid_note_name("notes.md")
-    assert tui._is_valid_note_name("my-todo-list.txt")
+    assert _is_valid_note_name("notes.md")
+    assert _is_valid_note_name("my-todo-list.txt")
 
 
 def test_note_names_with_path_separators_are_rejected():
-    assert not tui._is_valid_note_name("../secrets.md")
-    assert not tui._is_valid_note_name("a/b.md")
-    assert not tui._is_valid_note_name("a\\b.md")
+    assert not _is_valid_note_name("../secrets.md")
+    assert not _is_valid_note_name("a/b.md")
+    assert not _is_valid_note_name("a\\b.md")
 
 
 def test_note_names_starting_with_a_dot_are_rejected():
-    assert not tui._is_valid_note_name(".hidden.md")
+    assert not _is_valid_note_name(".hidden.md")
 
 
 def test_empty_or_whitespace_only_note_names_are_rejected():
-    assert not tui._is_valid_note_name("")
-    assert not tui._is_valid_note_name(" ")
-    assert not tui._is_valid_note_name("   ")
-    assert not tui._is_valid_note_name("\t")
+    assert not _is_valid_note_name("")
+    assert not _is_valid_note_name(" ")
+    assert not _is_valid_note_name("   ")
+    assert not _is_valid_note_name("\t")
 
 
 def test_note_names_with_leading_or_trailing_spaces_are_rejected():
-    assert not tui._is_valid_note_name(" notes.md")
-    assert not tui._is_valid_note_name("notes.md ")
+    assert not _is_valid_note_name(" notes.md")
+    assert not _is_valid_note_name("notes.md ")
 
 
 def test_note_names_with_windows_reserved_characters_are_rejected():
     for bad in '<>:"|?*':
-        assert not tui._is_valid_note_name(f"notes{bad}.md")
+        assert not _is_valid_note_name(f"notes{bad}.md")
 
 
 def test_note_names_with_control_characters_are_rejected():
-    assert not tui._is_valid_note_name("notes\x00.md")
-    assert not tui._is_valid_note_name("notes\n.md")
+    assert not _is_valid_note_name("notes\x00.md")
+    assert not _is_valid_note_name("notes\n.md")
 
 
 def test_text_that_fits_the_window_is_not_too_large():
