@@ -6,6 +6,11 @@ from pydantic import BaseModel
 class UploadRequest(BaseModel):
     content: str
     base_version: int | None = None
+    op_id: str | None = None
+
+
+class DeleteRequest(BaseModel):
+    op_id: str | None = None
 
 
 class FileResponse(BaseModel):
@@ -14,6 +19,8 @@ class FileResponse(BaseModel):
     content: str
     content_hash: str
     updated_at: datetime
+    had_conflict: bool = False
+    deleted: bool = False
 
 
 class FileSummary(BaseModel):
@@ -29,3 +36,5 @@ class HealthResponse(BaseModel):
     state: int
     leader: str | None
     has_quorum: bool
+    peers_connected: int = 0
+    peers_total: int = 0

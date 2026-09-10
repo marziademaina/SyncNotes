@@ -102,6 +102,79 @@ async def test_reconcile_repairs_local_bit_rot_even_when_hash_column_still_match
 
 
 @pytest.mark.asyncio
+async def test_reconcile_logs_recovered_files(local_db, mock_async_client, caplog):
+    h1 = _hash("hello")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/internal/manifest":
+            return httpx.Response(200, json={"notes.md": {"version": 1, "content_hash": h1}})
+        return httpx.Response(200, json=_file_response(1, "hello", h1))
+
+    mock_async_client(handler)
+
+    with caplog.at_level("WARNING"):
+        fixed = await reconcile_with_peer("http://primary:8000")
+
+    assert fixed == ["notes.md"]
+    assert any("notes.md" in r.message and "recovered" in r.message for r in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_reconcile_applies_a_deletion_the_peer_made(local_db, mock_async_client):
+    h1 = _hash("hello")
+    local_db.apply_if_newer("notes.md", 1, "hello", h1)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/internal/manifest":
+            return httpx.Response(200, json={"notes.md": {"version": 2, "content_hash": h1, "deleted": True}})
+        return httpx.Response(200, json={**_file_response(2, "hello", h1), "deleted": True})
+
+    mock_async_client(handler)
+
+    fixed = await reconcile_with_peer("http://primary:8000")
+
+    assert fixed == ["notes.md"]
+    assert local_db.list_files()["notes.md"]["deleted"] is True
+    assert local_db.list_files_summary() == []
+
+
+@pytest.mark.asyncio
+async def test_a_tombstoned_note_is_not_resurrected_by_a_stale_manifest(local_db, mock_async_client):
+    h1 = _hash("hello")
+    local_db.apply_if_newer("notes.md", 2, "hello", h1, deleted=True)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/internal/manifest":
+            return httpx.Response(200, json={"notes.md": {"version": 1, "content_hash": h1}})
+        return httpx.Response(200, json=_file_response(1, "hello", h1))
+
+    mock_async_client(handler)
+
+    fixed = await reconcile_with_peer("http://primary:8000")
+
+    assert fixed == []
+    assert local_db.list_files()["notes.md"]["deleted"] is True
+
+
+@pytest.mark.asyncio
+async def test_reconcile_logs_applied_deletions(local_db, mock_async_client, caplog):
+    h1 = _hash("hello")
+    local_db.apply_if_newer("notes.md", 1, "hello", h1)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/internal/manifest":
+            return httpx.Response(200, json={"notes.md": {"version": 2, "content_hash": h1, "deleted": True}})
+        return httpx.Response(200, json={**_file_response(2, "hello", h1), "deleted": True})
+
+    mock_async_client(handler)
+
+    with caplog.at_level("WARNING"):
+        await reconcile_with_peer("http://primary:8000")
+
+    assert any("deletion" in r.message and "notes.md" in r.message for r in caplog.records)
+
+
+@pytest.mark.asyncio
 async def test_reconcile_is_noop_when_already_up_to_date(local_db, mock_async_client):
     h3 = _hash("current")
     local_db.apply_if_newer("notes.md", 3, "current", h3)

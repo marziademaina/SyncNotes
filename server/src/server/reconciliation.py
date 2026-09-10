@@ -26,9 +26,12 @@ async def fetch_file(peer_url: str, name: str) -> dict:
 async def reconcile_with_peer(peer_url: str) -> list[str]:
     local_manifest = list_files()
     locally_corrupted = find_locally_corrupted_files()
+    if locally_corrupted:
+        logger.warning("local data corrupted for: %s - attempting recovery from %s", sorted(locally_corrupted), peer_url)
     remote_manifest = await fetch_manifest(peer_url)
 
-    fixed = []
+    fixed: list[str] = []
+    tombstoned: list[str] = []
     for name, remote in remote_manifest.items():
         local = local_manifest.get(name)
         needs_fetch = (
@@ -45,10 +48,15 @@ async def reconcile_with_peer(peer_url: str) -> list[str]:
                 file_data["content"],
                 file_data["content_hash"],
                 force=name in locally_corrupted,
+                deleted=file_data.get("deleted", False),
             )
             if status == "applied":
-                fixed.append(name)
-    return fixed
+                (tombstoned if file_data.get("deleted") else fixed).append(name)
+    if fixed:
+        logger.warning("recovered %d file(s) from %s: %s", len(fixed), peer_url, fixed)
+    if tombstoned:
+        logger.warning("applied %d deletion(s) from %s: %s", len(tombstoned), peer_url, tombstoned)
+    return fixed + tombstoned
 
 
 async def reconciliation_loop(get_peer_url: Callable[[], str | None], interval_seconds: float) -> None:

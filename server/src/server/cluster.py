@@ -3,7 +3,7 @@ from datetime import datetime
 
 from pysyncobj import FAIL_REASON, SyncObj, SyncObjConf, replicated
 
-from server.db import commit_write
+from server.db import commit_delete, commit_write
 
 
 class NotesStore(SyncObj):
@@ -15,6 +15,10 @@ class NotesStore(SyncObj):
         self, op_id: str, name: str, content: str, updated_at_iso: str, base_version: int | None = None
     ) -> dict:
         return commit_write(op_id, name, content, datetime.fromisoformat(updated_at_iso), base_version)
+
+    @replicated
+    def commit_deletion(self, op_id: str, name: str, updated_at_iso: str) -> dict:
+        return commit_delete(op_id, name, datetime.fromisoformat(updated_at_iso))
 
 
 TIMEOUT_FAIL_REASON = -1

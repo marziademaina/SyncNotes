@@ -74,6 +74,97 @@ def test_list_files_summary_is_sorted_by_name(local_db):
     assert names == ["aaa.md", "zzz.md"]
 
 
+def _now():
+    from datetime import datetime, timezone
+
+    return datetime.now(timezone.utc)
+
+
+def test_commit_delete_tombstones_and_bumps_version(local_db):
+    local_db.commit_write("op1", "notes.md", "hello", _now())
+    result = local_db.commit_delete("del1", "notes.md", _now())
+
+    assert result["version"] == 2
+    assert result["deleted"] is True
+    assert local_db.find_locally_corrupted_files() == set()
+
+
+def test_commit_delete_is_idempotent_on_op_id(local_db):
+    local_db.commit_write("op1", "notes.md", "hello", _now())
+    local_db.commit_delete("del1", "notes.md", _now())
+    again = local_db.commit_delete("del1", "notes.md", _now())
+    assert again["version"] == 2  # no second bump
+
+
+def test_commit_delete_twice_with_new_op_id_does_not_bump_again(local_db):
+    local_db.commit_write("op1", "notes.md", "hello", _now())
+    local_db.commit_delete("del1", "notes.md", _now())
+    again = local_db.commit_delete("del2", "notes.md", _now())
+    assert again["version"] == 2  # already deleted -> unchanged
+
+
+def test_commit_delete_of_unknown_note_writes_a_tombstone(local_db):
+    result = local_db.commit_delete("del1", "ghost.md", _now())
+    assert result["deleted"] is True
+    assert "ghost.md" in local_db.list_files()
+    assert local_db.list_files_summary() == []
+
+
+def test_commit_write_onto_a_tombstone_resurrects_with_new_content(local_db):
+    local_db.commit_write("op1", "notes.md", "original", _now())
+    local_db.commit_delete("del1", "notes.md", _now())
+
+    result = local_db.commit_write("op2", "notes.md", "brand new", _now())
+
+    assert result["deleted"] is False
+    assert result["content"] == "brand new"
+    assert result["version"] == 3
+
+
+def test_recreate_after_delete_works_even_with_a_colliding_op_id(local_db):
+    local_db.commit_write("same-op", "notes.md", "", _now())
+    local_db.commit_delete("del1", "notes.md", _now())
+
+    recreated = local_db.commit_write("same-op", "notes.md", "", _now())
+
+    assert recreated["deleted"] is False
+    assert recreated["version"] == 3
+    assert [n["name"] for n in local_db.list_files_summary()] == ["notes.md"]
+
+
+def test_redelete_after_recreate_works_even_with_a_colliding_delete_key(local_db):
+    local_db.commit_write("op1", "notes.md", "hi", _now())
+    local_db.commit_delete("del-key", "notes.md", _now())
+    local_db.commit_write("op2", "notes.md", "back again", _now())
+
+    redeleted = local_db.commit_delete("del-key", "notes.md", _now())
+
+    assert redeleted["deleted"] is True
+    assert local_db.list_files_summary() == []
+
+
+def test_manifest_includes_tombstones_but_summary_hides_them(local_db):
+    local_db.commit_write("op1", "notes.md", "hello", _now())
+    local_db.commit_delete("del1", "notes.md", _now())
+
+    assert local_db.list_files()["notes.md"]["deleted"] is True
+    assert local_db.list_files_summary() == []
+
+
+def test_apply_if_newer_carries_the_deleted_flag(local_db):
+    local_db.apply_if_newer("notes.md", 1, "hello", "h1")
+    local_db.apply_if_newer("notes.md", 2, "hello", "h1", deleted=True)
+
+    assert local_db.list_files()["notes.md"] == {"version": 2, "content_hash": "h1", "deleted": True}
+
+
+def test_apply_if_newer_leaves_the_tombstone_alone_when_deleted_is_not_passed(local_db):
+    local_db.apply_if_newer("notes.md", 2, "hello", "h1", deleted=True)
+    local_db.apply_if_newer("notes.md", 2, "repaired", "h1", force=True)
+
+    assert local_db.list_files()["notes.md"]["deleted"] is True
+
+
 def test_find_locally_corrupted_files_detects_content_hash_mismatch(local_db):
     import hashlib
 

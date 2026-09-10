@@ -3,18 +3,20 @@ import difflib
 Hunk = tuple[int, int, list[str]]
 
 
-def resolve_conflict(base_content: str | None, authoritative_content: str | None, uploaded_content: str) -> str:
+def resolve_conflict(
+    base_content: str | None, authoritative_content: str | None, uploaded_content: str
+) -> tuple[str, bool]:
     if authoritative_content is None:
-        return uploaded_content
+        return uploaded_content, False
 
     if base_content is None:
-        return authoritative_content
+        return authoritative_content, False
 
     if base_content == authoritative_content:
-        return uploaded_content
+        return uploaded_content, False
 
     if base_content == uploaded_content:
-        return authoritative_content
+        return authoritative_content, False
 
     base_lines = base_content.splitlines(keepends=True)
     server_lines = authoritative_content.splitlines(keepends=True)
@@ -24,9 +26,8 @@ def resolve_conflict(base_content: str | None, authoritative_content: str | None
     client_hunks = _hunks(base_lines, client_lines)
 
     non_conflicting_client_hunks = [h for h in client_hunks if not any(_overlaps(h, s) for s in server_hunks)]
+    had_conflict = len(non_conflicting_client_hunks) < len(client_hunks)
 
-    # Server hunks always win; where a client hunk survives (untouched by the
-    # server), it stands. At a shared boundary, the server's hunk sorts first.
     tagged = [(i1, i2, lines, 0) for i1, i2, lines in server_hunks]
     tagged += [(i1, i2, lines, 1) for i1, i2, lines in non_conflicting_client_hunks]
     combined = sorted(tagged, key=lambda h: (h[0], h[3]))
@@ -39,7 +40,7 @@ def resolve_conflict(base_content: str | None, authoritative_content: str | None
         pos = max(pos, i2)
     merged.extend(base_lines[pos:])
 
-    return "".join(merged)
+    return "".join(merged), had_conflict
 
 
 def _hunks(base_lines: list[str], other_lines: list[str]) -> list[Hunk]:
