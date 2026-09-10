@@ -33,7 +33,6 @@ def main() -> None:
             run_cli("upload", FILENAME, str(seed), cwd=client_a)
             ok(f"seeded {FILENAME} with the base content")
 
-            # --- Scene 1: disjoint edits from two clients, unaware of each other ---
             print("\n--- Scene 1: two clients edit different lines from the same base ---")
 
             note_a = client_a / FILENAME
@@ -56,7 +55,6 @@ def main() -> None:
                 fail(f"expected both disjoint edits to survive, got: {merged['content']!r}")
             ok(f"both edits survived: {merged['content']!r}")
 
-            # --- Scene 2: a genuine conflict on the same line ---
             print("\n--- Scene 2: two clients edit the SAME line from the same base ---")
 
             note_c = client_c / FILENAME
@@ -69,7 +67,7 @@ def main() -> None:
 
             run_cli("upload", FILENAME, str(note_c), cwd=client_c)
             out_d = run_cli("upload", FILENAME, str(note_d), cwd=client_d)
-            if "merged in changes" not in out_d:
+            if "were dropped" not in out_d:
                 fail("expected client D to be told its conflicting edit did not survive")
             ok("client D was told its edit didn't survive the conflict")
 
