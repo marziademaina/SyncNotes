@@ -313,7 +313,7 @@ def _draw_menu(stdscr, gateway: str, user: str, notes: list[dict], selected: int
 
 def _prompt_name(stdscr) -> str | None:
     max_y, max_x = stdscr.getmaxyx()
-    hint = "no '/' '\\' or leading '.'  -  add '.md' yourself if you want it"
+    hint = "no '/' '\\' or leading '.'"
     prompt = "New note name (empty to cancel): "
     row = max_y - 1
     _safe_addstr(stdscr, row - 1, 0, " " * max(max_x - 1, 0))
