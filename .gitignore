@@ -8,3 +8,8 @@ __pycache__/
 data/
 *.db
 *.db-journal
+
+*.syncnotes.json
+.*.syncnotes.json
+
+docs/
