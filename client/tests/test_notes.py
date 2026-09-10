@@ -22,6 +22,23 @@ def test_fetch_notes_wraps_connection_errors_in_a_friendly_message(monkeypatch):
         notes.fetch_notes("http://gateway")
 
 
+def test_watch_notes_yields_each_list_from_watch_events(monkeypatch):
+    updates = [[{"name": "a.md", "version": 1}], [{"name": "a.md", "version": 2}]]
+    monkeypatch.setattr(notes, "watch_events", lambda gateway: iter(updates))
+
+    assert list(notes.watch_notes("http://gateway")) == updates
+
+
+def test_watch_notes_wraps_connection_errors_in_a_friendly_message(monkeypatch):
+    def boom(gateway):
+        raise requests.ConnectionError("refused")
+
+    monkeypatch.setattr(notes, "watch_events", boom)
+
+    with pytest.raises(notes.SyncNotesError, match="Cannot reach SyncNotes"):
+        list(notes.watch_notes("http://gateway"))
+
+
 def test_open_note_writes_the_file_and_sync_state(tmp_path, monkeypatch):
     monkeypatch.setattr(
         notes, "download_file", lambda gateway, name: {"content": "hello", "version": 3}
@@ -104,15 +121,25 @@ def test_save_note_wraps_local_write_failures(tmp_path, monkeypatch):
         notes.save_note("http://gateway", blocked, "notes.md", "hi")
 
 
-def test_describe_upload_outcome_is_silent_when_the_server_kept_the_upload_as_is():
+def test_describe_upload_outcome_confirms_a_clean_save_when_the_server_kept_the_upload_as_is():
     result = {"content": "my edit", "version": 2}
-    assert notes.describe_upload_outcome(3, "my edit", result) == ""
+    message = notes.describe_upload_outcome(3, "my edit", result)
+    assert message.strip() != ""
+    assert "no conflicting changes" in message
 
 
 def test_describe_upload_outcome_reports_a_partial_merge_when_base_version_is_known():
     result = {"content": "combined content", "version": 5}
     message = notes.describe_upload_outcome(4, "my edit", result)
     assert "merged in changes" in message
+
+
+def test_describe_upload_outcome_reports_a_dropped_edit_on_a_real_conflict():
+    result = {"content": "combined content", "version": 5, "had_conflict": True}
+    message = notes.describe_upload_outcome(4, "my edit", result)
+    assert "same lines" in message
+    assert "dropped" in message
+    assert "merged in changes" not in message
 
 
 def test_describe_upload_outcome_reports_a_full_discard_when_base_version_is_missing():
@@ -129,10 +156,82 @@ def test_create_note_uploads_empty_content(tmp_path, monkeypatch):
         captured["content"] = content
         return {"version": 1, "content": content, "content_hash": "abc"}
 
+    monkeypatch.setattr(notes, "list_files", lambda gateway: [])
     monkeypatch.setattr(notes, "upload_file", fake_upload)
 
-    local_path = notes.create_note("http://gateway", tmp_path, "new.md")
+    result = notes.create_note("http://gateway", tmp_path, "new.md")
 
     assert captured["content"] == ""
-    assert local_path == tmp_path / "new.md"
-    assert local_path.read_text() == ""
+    assert result["version"] == 1
+    assert (tmp_path / "new.md").read_text() == ""
+
+
+def test_create_note_rejects_a_name_that_already_exists(tmp_path, monkeypatch):
+    monkeypatch.setattr(notes, "list_files", lambda gateway: [{"name": "ciao", "version": 2}])
+
+    def fail_upload(*args, **kwargs):
+        raise AssertionError("create_note must not upload over an existing note")
+
+    monkeypatch.setattr(notes, "upload_file", fail_upload)
+
+    with pytest.raises(notes.SyncNotesError, match="already exists"):
+        notes.create_note("http://gateway", tmp_path, "ciao")
+
+
+def test_delete_note_calls_the_api_and_removes_local_file_and_sidecar(tmp_path, monkeypatch):
+    (tmp_path / "notes.md").write_text("hello")
+    (tmp_path / ".notes.md.syncnotes.json").write_text(json.dumps({"name": "notes.md", "version": 4}))
+    captured = {}
+
+    def fake_delete(gateway, name, version):
+        captured["name"] = name
+        captured["version"] = version
+        return {"version": 5, "deleted": True}
+
+    monkeypatch.setattr(notes, "delete_file", fake_delete)
+
+    notes.delete_note("http://gateway", tmp_path, "notes.md")
+
+    assert captured == {"name": "notes.md", "version": 4}
+    assert not (tmp_path / "notes.md").exists()
+    assert not (tmp_path / ".notes.md.syncnotes.json").exists()
+
+
+def test_delete_note_treats_a_404_as_already_deleted(tmp_path, monkeypatch):
+    (tmp_path / "notes.md").write_text("hello")
+    (tmp_path / ".notes.md.syncnotes.json").write_text(json.dumps({"name": "notes.md", "version": 4}))
+    response = requests.Response()
+    response.status_code = 404
+
+    def boom(gateway, name, version):
+        raise requests.HTTPError(response=response)
+
+    monkeypatch.setattr(notes, "delete_file", boom)
+
+    notes.delete_note("http://gateway", tmp_path, "notes.md")  # no exception
+
+    assert not (tmp_path / "notes.md").exists()
+
+
+def test_delete_note_wraps_other_errors(tmp_path, monkeypatch):
+    (tmp_path / ".notes.md.syncnotes.json").write_text(json.dumps({"name": "notes.md", "version": 4}))
+
+    def boom(gateway, name, version):
+        raise requests.ConnectionError("refused")
+
+    monkeypatch.setattr(notes, "delete_file", boom)
+
+    with pytest.raises(notes.SyncNotesError, match="Cannot reach SyncNotes"):
+        notes.delete_note("http://gateway", tmp_path, "notes.md")
+
+
+def test_describe_create_outcome_reports_a_fresh_creation():
+    result = {"name": "todo.md", "version": 1, "content": ""}
+    assert notes.describe_create_outcome("todo.md", result) == "created 'todo.md'"
+
+
+def test_describe_create_outcome_warns_when_the_note_already_existed():
+    result = {"name": "todo.md", "version": 3, "content": "someone else's note"}
+    message = notes.describe_create_outcome("todo.md", result)
+    assert "already existed" in message
+    assert "nothing was created" in message

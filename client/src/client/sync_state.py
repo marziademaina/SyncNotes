@@ -3,7 +3,8 @@ from pathlib import Path
 
 
 def _sidecar_path(local_path: str) -> Path:
-    return Path(f"{local_path}.syncnotes.json")
+    path = Path(local_path)
+    return path.with_name(f".{path.name}.syncnotes.json")
 
 
 def read_base_version(local_path: str, name: str) -> int | None:
@@ -11,7 +12,10 @@ def read_base_version(local_path: str, name: str) -> int | None:
     if not path.exists():
         return None
 
-    state = json.loads(path.read_text())
+    try:
+        state = json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return None
     if state.get("name") != name:
         return None
     return state.get("version")
@@ -19,3 +23,7 @@ def read_base_version(local_path: str, name: str) -> int | None:
 
 def write_state(local_path: str, name: str, version: int) -> None:
     _sidecar_path(local_path).write_text(json.dumps({"name": name, "version": version}))
+
+
+def clear_state(local_path: str) -> None:
+    _sidecar_path(local_path).unlink(missing_ok=True)

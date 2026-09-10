@@ -9,7 +9,7 @@ def test_write_state_creates_a_sidecar_next_to_the_file(tmp_path):
 
     write_state(str(target), "notes.md", 3)
 
-    sidecar = tmp_path / "notes.md.syncnotes.json"
+    sidecar = tmp_path / ".notes.md.syncnotes.json"
     assert json.loads(sidecar.read_text()) == {"name": "notes.md", "version": 3}
 
 

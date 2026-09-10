@@ -4,16 +4,36 @@ import curses
 import curses.ascii
 import curses.textpad
 import getpass
+import threading
 from pathlib import Path
 
-from client.notes import SyncNotesError, create_note, describe_upload_outcome, fetch_notes, open_note, save_note
-from client.sync_state import read_base_version
+import requests
+
+from client.api import download_file
+from client.notes import (
+    SyncNotesError,
+    create_note,
+    delete_note,
+    describe_create_outcome,
+    describe_delete_outcome,
+    describe_upload_outcome,
+    fetch_notes,
+    open_note,
+    save_note,
+    watch_notes,
+)
+from client.sync_state import clear_state, read_base_version, write_state
 
 DEFAULT_GATEWAY = "http://localhost:8080"
 DEFAULT_SYNC_DIR = Path.home() / "SyncNotes"
 
 MIN_ROWS = 10
 MIN_COLS = 40
+
+REFRESH_TICK_MS = 300
+
+_WATCH_MIN_BACKOFF_SECONDS = 2.0
+_WATCH_MAX_BACKOFF_SECONDS = 30.0
 
 
 def _default_user() -> str:
@@ -34,6 +54,13 @@ def _run(stdscr, gateway: str, sync_dir: Path, user: str) -> None:
     curses.curs_set(0)
     selected = 0
     notes, status = _reload(gateway)
+    live = _LiveNotes(notes)
+
+    stop = threading.Event()
+    watcher = threading.Thread(target=_watch_loop, args=(gateway, sync_dir, live, stop), daemon=True)
+    watcher.start()
+
+    stdscr.timeout(REFRESH_TICK_MS)
 
     while True:
         max_y, max_x = stdscr.getmaxyx()
@@ -44,16 +71,27 @@ def _run(stdscr, gateway: str, sync_dir: Path, user: str) -> None:
                 _safe_addstr(stdscr, 1, 0, "Resize it, or press 'q' to quit.")
                 stdscr.refresh()
                 if stdscr.getch() == ord("q"):
+                    stop.set()
                     return
             except curses.error:
                 pass
             continue
+
+        notes = live.notes()
+
+        if selected >= len(notes):
+            selected = max(len(notes) - 1, 0)
+        bg_status = live.take_status()
+        if bg_status:
+            status = bg_status
 
         try:
             _draw_menu(stdscr, gateway, user, notes, selected, status)
             key = stdscr.getch()
         except curses.error:
             continue
+        if key == -1:
+            continue 
         status = ""
 
         if key in (curses.KEY_UP, ord("k")) and notes:
@@ -62,10 +100,11 @@ def _run(stdscr, gateway: str, sync_dir: Path, user: str) -> None:
             selected = (selected + 1) % len(notes)
         elif key in (curses.KEY_ENTER, 10, 13) and notes:
             try:
-                status = _edit_note_flow(stdscr, gateway, sync_dir, user, notes[selected]["name"])
+                status = _edit_note_flow(stdscr, gateway, sync_dir, user, notes[selected]["name"], live)
             except curses.error:
                 status = "screen glitch while editing - your last edit may not have saved, please retry"
             notes, reload_status = _reload(gateway)
+            live.set_notes(notes)
             status = reload_status or status
             selected = min(selected, max(len(notes) - 1, 0))
         elif key == ord("n"):
@@ -73,19 +112,44 @@ def _run(stdscr, gateway: str, sync_dir: Path, user: str) -> None:
                 name = _prompt_name(stdscr)
             except curses.error:
                 name, status = None, "screen glitch - try 'n' again"
-            if name and not _is_valid_note_name(name):
-                status = f"'{name}' is not a valid note name (no '/', '\\', or leading '.')"
-            elif name:
+            if name is not None:
+                reason = _invalid_note_name_reason(name)
+                if reason:
+                    status = f"not a valid note name: {reason}"
+                elif any(note["name"] == name for note in notes):
+                    status = f"'{name}' already exists - open it instead"
+                else:
+                    try:
+                        result = create_note(gateway, sync_dir, name)
+                        status = describe_create_outcome(name, result)
+                    except SyncNotesError as exc:
+                        status = str(exc)
+            notes, reload_status = _reload(gateway)
+            live.set_notes(notes)
+            status = reload_status or status
+        elif key == ord("d") and notes:
+            name = notes[selected]["name"]
+            try:
+                confirmed = _prompt_confirm(stdscr, f"Delete '{name}'? This removes it for everyone (y/n): ")
+            except curses.error:
+                confirmed, status = False, "screen glitch - try 'd' again"
+            if confirmed:
                 try:
-                    create_note(gateway, sync_dir, name)
-                    status = f"created '{name}'"
+                    delete_note(gateway, sync_dir, name)
+                    status = describe_delete_outcome(name)
                 except SyncNotesError as exc:
                     status = str(exc)
-            notes, reload_status = _reload(gateway)
-            status = reload_status or status
+                notes, reload_status = _reload(gateway)
+                live.set_notes(notes)
+                status = reload_status or status
+                selected = min(selected, max(len(notes) - 1, 0))
+            else:
+                status = status or "delete cancelled"
         elif key == ord("r"):
             notes, status = _reload(gateway)
+            live.set_notes(notes)
         elif key in (ord("q"), curses.ascii.ESC):
+            stop.set()
             return
 
 
@@ -94,6 +158,113 @@ def _reload(gateway: str) -> tuple[list[dict], str]:
         return fetch_notes(gateway), ""
     except SyncNotesError as exc:
         return [], str(exc)
+
+
+class _LiveNotes:
+
+    def __init__(self, notes: list[dict]) -> None:
+        self._lock = threading.Lock()
+        self._notes = notes
+        self._status = ""
+        self._editing: str | None = None
+
+    def notes(self) -> list[dict]:
+        with self._lock:
+            return self._notes
+
+    def set_notes(self, notes: list[dict]) -> None:
+        with self._lock:
+            self._notes = notes
+
+    def take_status(self) -> str:
+        with self._lock:
+            status, self._status = self._status, ""
+            return status
+
+    def set_status(self, status: str) -> None:
+        with self._lock:
+            self._status = status
+
+    def begin_editing(self, name: str) -> None:
+        with self._lock:
+            self._editing = name
+
+    def end_editing(self) -> None:
+        with self._lock:
+            self._editing = None
+
+    def is_editing(self, name: str) -> bool:
+        with self._lock:
+            return self._editing == name
+
+    def write_if_not_editing(self, name: str, write) -> bool:
+        with self._lock:
+            if self._editing == name:
+                return False
+            write()
+            return True
+
+
+def _sync_local_copies(gateway: str, sync_dir: Path, notes: list[dict], live: _LiveNotes) -> None:
+    for note in notes:
+        name = note["name"]
+        local_path = sync_dir / name
+        if not local_path.exists() or live.is_editing(name):
+            continue  
+        if read_base_version(str(local_path), name) == note["version"]:
+            continue
+        try:
+            result = download_file(gateway, name)
+
+            def write(result=result, local_path=local_path, name=name) -> None:
+                local_path.write_text(result["content"])
+                write_state(str(local_path), name, result["version"])
+
+            live.write_if_not_editing(name, write)
+        except (requests.RequestException, OSError):
+            pass 
+    if notes:
+        _remove_deleted_local_copies(sync_dir, {note["name"] for note in notes}, live)
+
+
+def _remove_deleted_local_copies(sync_dir: Path, live_names: set[str], live: _LiveNotes) -> None:
+    try:
+        entries = list(sync_dir.iterdir())
+    except OSError:
+        return
+    for path in entries:
+        name = path.name
+        if name.startswith(".") or not path.is_file() or name in live_names:
+            continue
+        if read_base_version(str(path), name) is None or live.is_editing(name):
+            continue
+
+        def remove(path=path, name=name) -> None:
+            path.unlink(missing_ok=True)
+            clear_state(str(path))
+
+        try:
+            live.write_if_not_editing(name, remove)
+        except OSError:
+            pass 
+
+
+def _watch_loop(gateway: str, sync_dir: Path, live: _LiveNotes, stop: threading.Event) -> None:
+    backoff = _WATCH_MIN_BACKOFF_SECONDS
+    while not stop.is_set():
+        try:
+            for notes in watch_notes(gateway):
+                if stop.is_set():
+                    return
+                backoff = _WATCH_MIN_BACKOFF_SECONDS
+                _sync_local_copies(gateway, sync_dir, notes, live)
+                live.set_notes(notes)
+        except SyncNotesError as exc:
+            live.set_status(f"live updates paused: {exc}")
+        if stop.is_set():
+            return
+        stop.wait(backoff)
+        backoff = min(backoff * 2, _WATCH_MAX_BACKOFF_SECONDS)
 
 
 def _safe_addstr(win, y: int, x: int, text: str, attr: int = 0) -> None:
@@ -134,7 +305,7 @@ def _draw_menu(stdscr, gateway: str, user: str, notes: list[dict], selected: int
 
     footer_row = max_y - 3
     _safe_addstr(stdscr, footer_row, 0, "-" * max(max_x - 1, 0))
-    _safe_addstr(stdscr, footer_row + 1, 0, "[Enter] open   [n] new note   [r] refresh   [q] quit")
+    _safe_addstr(stdscr, footer_row + 1, 0, "[Enter] open  [n] new  [d] delete  [r] refresh  [q] quit")
     if status:
         _safe_addstr(stdscr, footer_row + 2, 0, status)
     stdscr.refresh()
@@ -150,43 +321,87 @@ def _prompt_name(stdscr) -> str | None:
 
     curses.echo()
     curses.curs_set(1)
+    stdscr.timeout(-1)
     try:
         col = min(len(prompt), max(max_x - 1, 0))
         raw = stdscr.getstr(row, col, max(max_x - col - 1, 1))
     finally:
+        stdscr.timeout(REFRESH_TICK_MS)
+        curses.noecho()
+        curses.curs_set(0)
+    if not raw:
+        return None
+    return raw.decode("utf-8", errors="ignore").strip()
+
+
+def _prompt_confirm(stdscr, prompt: str) -> bool:
+    max_y, max_x = stdscr.getmaxyx()
+    row = max_y - 1
+    _safe_addstr(stdscr, row, 0, " " * max(max_x - 1, 0))
+    _safe_addstr(stdscr, row, 0, prompt)
+    stdscr.refresh()
+
+    curses.echo()
+    curses.curs_set(1)
+    stdscr.timeout(-1)
+    try:
+        col = min(len(prompt), max(max_x - 1, 0))
+        raw = stdscr.getstr(row, col, max(max_x - col - 1, 1))
+    finally:
+        stdscr.timeout(REFRESH_TICK_MS)
         curses.noecho()
         curses.curs_set(0)
 
-    name = raw.decode("utf-8", errors="ignore").strip()
-    return name or None
+    return bool(raw) and raw.decode("utf-8", errors="ignore").strip()[:1].lower() == "y"
+
+
+_ILLEGAL_NAME_CHARS = set('<>:"|?*')
+
+
+def _invalid_note_name_reason(name: str) -> str | None:
+    if not name or not name.strip():
+        return "can't be empty or just spaces"
+    if name != name.strip():
+        return "can't have leading/trailing spaces"
+    if "/" in name or "\\" in name:
+        return "can't contain '/' or '\\'"
+    if name.startswith("."):
+        return "can't start with '.'"
+    if any(ch in _ILLEGAL_NAME_CHARS or ord(ch) < 32 for ch in name):
+        return "has an unsupported character" 
+    return None
 
 
 def _is_valid_note_name(name: str) -> bool:
-    return "/" not in name and "\\" not in name and not name.startswith(".")
+    return _invalid_note_name_reason(name) is None
 
 
-def _edit_note_flow(stdscr, gateway: str, sync_dir: Path, user: str, name: str) -> str:
+def _edit_note_flow(stdscr, gateway: str, sync_dir: Path, user: str, name: str, live: _LiveNotes) -> str:
+    live.begin_editing(name)
     try:
-        local_path = open_note(gateway, sync_dir, name)
-    except SyncNotesError as exc:
-        return str(exc)
+        try:
+            local_path = open_note(gateway, sync_dir, name)
+        except SyncNotesError as exc:
+            return str(exc)
 
-    content = local_path.read_text()
-    try:
-        new_content, saved = _edit_text(stdscr, user, name, content)
-    except _TooLargeToEdit:
-        return f"'{name}' is too big for this window - resize your terminal and try again"
-    if not saved:
-        return f"'{name}' closed without saving"
+        content = local_path.read_text()
+        try:
+            new_content, saved = _edit_text(stdscr, user, name, content)
+        except _TooLargeToEdit:
+            return f"'{name}' is too big for this window - resize your terminal and try again"
+        if not saved:
+            return f"'{name}' closed without saving"
 
-    base_version = read_base_version(str(local_path), name)
-    try:
-        result = save_note(gateway, sync_dir, name, new_content)
-    except SyncNotesError as exc:
-        return str(exc)
+        base_version = read_base_version(str(local_path), name)
+        try:
+            result = save_note(gateway, sync_dir, name, new_content)
+        except SyncNotesError as exc:
+            return str(exc)
 
-    note = describe_upload_outcome(base_version, new_content, result)
-    return f"saved '{name}' -> version {result['version']}{note}"
+        note = describe_upload_outcome(base_version, new_content, result)
+        return f"saved '{name}' -> version {result['version']}{note}"
+    finally:
+        live.end_editing()
 
 
 class _TooLargeToEdit(Exception):
@@ -229,7 +444,7 @@ def _edit_text(stdscr, user: str, name: str, initial_text: str) -> tuple[str, bo
     def validator(ch):
         if ch == curses.ascii.ESC:
             cancelled["flag"] = True
-            return curses.ascii.BEL  # tells Textbox to stop editing
+            return curses.ascii.BEL 
         return ch
 
     box = curses.textpad.Textbox(edit_win, insert_mode=True)

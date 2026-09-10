@@ -1,11 +1,10 @@
-# Business logic shared by the TUI and the CLI: fetching, opening, saving and creating notes.
-
+from collections.abc import Iterator
 from pathlib import Path
 
 import requests
 
-from client.api import download_file, list_files, upload_file
-from client.sync_state import read_base_version, write_state
+from client.api import delete_file, download_file, list_files, upload_file, watch_events
+from client.sync_state import clear_state, read_base_version, write_state
 
 
 class SyncNotesError(Exception):
@@ -36,6 +35,13 @@ def friendly_error(exc: Exception) -> str:
 def fetch_notes(gateway: str) -> list[dict]:
     try:
         return list_files(gateway)
+    except requests.RequestException as exc:
+        raise SyncNotesError(friendly_error(exc)) from exc
+
+
+def watch_notes(gateway: str) -> Iterator[list[dict]]:
+    try:
+        yield from watch_events(gateway)
     except requests.RequestException as exc:
         raise SyncNotesError(friendly_error(exc)) from exc
 
@@ -73,18 +79,60 @@ def save_note(gateway: str, sync_dir: Path, name: str, content: str) -> dict:
     return result
 
 
-def create_note(gateway: str, sync_dir: Path, name: str) -> Path:
-    save_note(gateway, sync_dir, name, "")
-    return sync_dir / name
+def delete_note(gateway: str, sync_dir: Path, name: str) -> None:
+    local_path = sync_dir / name
+    version = read_base_version(str(local_path), name)
+    if version is None:
+        version = next((n["version"] for n in fetch_notes(gateway) if n["name"] == name), None)
+
+    try:
+        delete_file(gateway, name, version)
+    except requests.HTTPError as exc:
+        status = exc.response.status_code if exc.response is not None else None
+        if status != 404:
+            raise SyncNotesError(friendly_error(exc)) from exc
+    except requests.RequestException as exc:
+        raise SyncNotesError(friendly_error(exc)) from exc
+
+    local_path.unlink(missing_ok=True)
+    clear_state(str(local_path))
+
+
+def describe_delete_outcome(name: str) -> str:
+    return f"deleted '{name}'"
+
+
+def note_exists(gateway: str, name: str) -> bool:
+    return any(note["name"] == name for note in fetch_notes(gateway))
+
+
+def create_note(gateway: str, sync_dir: Path, name: str) -> dict:
+    if note_exists(gateway, name):
+        raise SyncNotesError(f"a note named '{name}' already exists - open it instead")
+    return save_note(gateway, sync_dir, name, "")
+
+
+def describe_create_outcome(name: str, result: dict) -> str:
+    if result.get("content", "") == "":
+        return f"created '{name}'"
+    return (
+        f"'{name}' already existed on the server (version {result['version']}) - "
+        f"nothing was created, open it instead"
+    )
 
 
 def describe_upload_outcome(base_version: int | None, submitted_content: str, result: dict) -> str:
 
     if result["content"] == submitted_content:
-        return ""
+        return " (no conflicting changes - saved as-is)"
     if base_version is None:
         return (
             " (none of your changes were applied, there was no saved version to compare "
             "against, so the server kept its own content; download the note again before editing)"
+        )
+    if result.get("had_conflict"):
+        return (
+            " (someone else edited the same lines - your changes to those lines were dropped, "
+            "the rest of your edit was kept)"
         )
     return " (server merged in changes since your last download)"

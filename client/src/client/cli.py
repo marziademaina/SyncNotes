@@ -1,9 +1,10 @@
 import argparse
+import os
 import sys
 
-from client.api import download_file, list_files, upload_file
+from client.api import delete_file, download_file, list_files, upload_file
 from client.notes import describe_upload_outcome
-from client.sync_state import read_base_version, write_state
+from client.sync_state import clear_state, read_base_version, write_state
 
 DEFAULT_GATEWAY = "http://localhost:8080"
 
@@ -22,6 +23,10 @@ def main() -> None:
     upload_parser = subparsers.add_parser("upload", help="Upload a local file to the cluster")
     upload_parser.add_argument("name")
     upload_parser.add_argument("path", help="Local file path to upload")
+
+    delete_parser = subparsers.add_parser("delete", help="Delete a note on the cluster")
+    delete_parser.add_argument("name")
+    delete_parser.add_argument("--local", help="Also remove this local copy and its sidecar")
 
     tui_parser = subparsers.add_parser(
         "tui", help="Open the interactive note browser (no commands or paths to remember)"
@@ -59,6 +64,16 @@ def main() -> None:
                 f.write(result["content"])
         write_state(args.path, args.name, result["version"])
         print(f"uploaded {args.name}: now version {result['version']} ({result['content_hash'][:12]}){note}")
+    elif args.command == "delete":
+        version = read_base_version(args.local, args.name) if args.local else None
+        result = delete_file(args.gateway, args.name, version)
+        if args.local:
+            try:
+                os.unlink(args.local)
+            except FileNotFoundError:
+                pass
+            clear_state(args.local)
+        print(f"deleted {args.name} (tombstoned at version {result['version']})")
     elif args.command == "tui":
         from client.tui import DEFAULT_SYNC_DIR, main as tui_main
 

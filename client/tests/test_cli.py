@@ -114,6 +114,46 @@ def test_upload_command_warns_when_a_missing_base_version_discards_the_edit(tmp_
     assert "merged in changes" not in out
 
 
+def test_delete_command_calls_the_api(monkeypatch, capsys):
+    captured = {}
+
+    def fake_delete(gateway, name, version):
+        captured["name"] = name
+        captured["version"] = version
+        return {"version": 2, "deleted": True}
+
+    monkeypatch.setattr(cli, "delete_file", fake_delete)
+    monkeypatch.setattr(sys, "argv", ["syncnotes-client", "delete", "notes.md"])
+
+    cli.main()
+
+    assert captured == {"name": "notes.md", "version": None}
+    assert "deleted notes.md" in capsys.readouterr().out
+
+
+def test_delete_command_with_local_removes_the_file_and_sidecar(tmp_path, monkeypatch, capsys):
+    local_path = tmp_path / "notes.md"
+    local_path.write_text("hello")
+    (tmp_path / ".notes.md.syncnotes.json").write_text(json.dumps({"name": "notes.md", "version": 4}))
+
+    captured = {}
+
+    def fake_delete(gateway, name, version):
+        captured["version"] = version
+        return {"version": 5, "deleted": True}
+
+    monkeypatch.setattr(cli, "delete_file", fake_delete)
+    monkeypatch.setattr(
+        sys, "argv", ["syncnotes-client", "delete", "notes.md", "--local", str(local_path)]
+    )
+
+    cli.main()
+
+    assert captured["version"] == 4
+    assert not local_path.exists()
+    assert not (tmp_path / ".notes.md.syncnotes.json").exists()
+
+
 def test_list_command_prints_the_notes_on_the_server(monkeypatch, capsys):
     monkeypatch.setattr(
         cli,
