@@ -41,7 +41,7 @@ def main() -> None:
         if not notes:
             print("no notes on the server yet")
         for note in notes:
-            print(f"{note['name']}\tv{note['version']}\t{note['updated_at']}")
+            print(f"{note['name']}\tv{note['version']}\t{note['updated_at']} UTC")
     elif args.command == "download":
         result = download_file(args.gateway, args.name)
         if args.out:

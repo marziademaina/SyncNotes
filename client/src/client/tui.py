@@ -5,6 +5,7 @@ import curses.ascii
 import curses.textpad
 import getpass
 import threading
+from datetime import datetime
 from pathlib import Path
 
 import requests
@@ -284,6 +285,14 @@ def _draw_user_label(stdscr, user: str) -> None:
     _safe_addstr(stdscr, 0, col, label, curses.A_BOLD)
 
 
+def _format_updated_at(raw: str) -> str:
+    try:
+        dt = datetime.fromisoformat(raw)
+    except ValueError:
+        return f"{raw} UTC"
+    return f"{dt.strftime('%Y-%m-%d')} T: {dt.strftime('%H:%M:%S')}+00:00"
+
+
 def _draw_menu(stdscr, gateway: str, user: str, notes: list[dict], selected: int, status: str) -> None:
     stdscr.erase()
     max_y, max_x = stdscr.getmaxyx()
@@ -299,7 +308,7 @@ def _draw_menu(stdscr, gateway: str, user: str, notes: list[dict], selected: int
             row = 3 + i
             if row >= max_y - 4:
                 break
-            line = f"{note['name']:<30} v{note['version']:<4} updated {note['updated_at']}"
+            line = f"{note['name']:<30} v{note['version']:<4} updated {_format_updated_at(note['updated_at'])}"
             attr = curses.A_REVERSE if i == selected else curses.A_NORMAL
             _safe_addstr(stdscr, row, 2, line, attr)
 
