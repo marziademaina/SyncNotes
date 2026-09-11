@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 REPLICA_URLS = [u.strip() for u in os.environ.get("REPLICA_URLS", "http://server-1:8000").split(",") if u.strip()]
 REQUEST_TIMEOUT = 5.0
-EVENTS_POLL_INTERVAL_SECONDS = float(os.environ.get("EVENTS_POLL_INTERVAL_SECONDS", "3"))
+EVENTS_POLL_INTERVAL_SECONDS = float(os.environ.get("EVENTS_POLL_INTERVAL_SECONDS", "1"))
 EVENTS_HEARTBEAT_SECONDS = float(os.environ.get("EVENTS_HEARTBEAT_SECONDS", "15"))
 
 app = FastAPI(title="SyncNotes gateway")
