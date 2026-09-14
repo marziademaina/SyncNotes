@@ -1,4 +1,5 @@
 import json
+from datetime import timedelta, timezone
 
 import pytest
 import requests
@@ -235,3 +236,21 @@ def test_describe_create_outcome_warns_when_the_note_already_existed():
     message = notes.describe_create_outcome("todo.md", result)
     assert "already existed" in message
     assert "nothing was created" in message
+
+
+def test_format_updated_at_converts_utc_to_the_given_local_offset():
+    ahead = timezone(timedelta(hours=5, minutes=30))
+    assert notes.format_updated_at("2026-01-01T00:00:00+00:00", tz=ahead) == "2026-01-01 T: 05:30:00+05:30"
+
+
+def test_format_updated_at_handles_a_negative_offset_crossing_midnight():
+    behind = timezone(timedelta(hours=-8))
+    assert notes.format_updated_at("2026-01-01T02:00:00+00:00", tz=behind) == "2025-12-31 T: 18:00:00-08:00"
+
+
+def test_format_updated_at_is_a_no_op_when_already_in_utc():
+    assert notes.format_updated_at("2026-01-01T00:00:00+00:00", tz=timezone.utc) == "2026-01-01 T: 00:00:00+00:00"
+
+
+def test_format_updated_at_falls_back_to_the_raw_string_on_bad_input():
+    assert notes.format_updated_at("not-a-timestamp") == "not-a-timestamp UTC"

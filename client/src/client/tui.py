@@ -5,7 +5,6 @@ import curses.ascii
 import curses.textpad
 import getpass
 import threading
-from datetime import datetime
 from pathlib import Path
 
 import requests
@@ -19,6 +18,7 @@ from client.notes import (
     describe_delete_outcome,
     describe_upload_outcome,
     fetch_notes,
+    format_updated_at,
     open_note,
     save_note,
     watch_notes,
@@ -289,16 +289,7 @@ def _draw_user_label(stdscr, user: str) -> None:
     _safe_addstr(stdscr, 0, col, label, curses.A_BOLD)
 
 
-def _format_updated_at(raw: str) -> str:
-    try:
-        dt = datetime.fromisoformat(raw)
-    except ValueError:
-        return f"{raw} UTC"
-    return f"{dt.strftime('%Y-%m-%d')} T: {dt.strftime('%H:%M:%S')}+00:00"
-
-
 def _scroll_offset(selected: int, offset: int, visible_rows: int, total: int) -> int:
-    """Slide the list's scroll offset so the selected row stays visible."""
     if visible_rows <= 0 or total <= 0:
         return 0
     offset = min(offset, max(total - visible_rows, 0))
@@ -328,7 +319,7 @@ def _draw_menu(stdscr, gateway: str, user: str, notes: list[dict], selected: int
             if row >= max_y - 4:
                 break
             idx = offset + i
-            line = f"{note['name']:<30} v{note['version']:<4} updated {_format_updated_at(note['updated_at'])}"
+            line = f"{note['name']:<30} v{note['version']:<4} updated {format_updated_at(note['updated_at'])}"
             attr = curses.A_REVERSE if idx == selected else curses.A_NORMAL
             _safe_addstr(stdscr, row, 2, line, attr)
             shown += 1

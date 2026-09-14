@@ -3,7 +3,7 @@ import os
 import sys
 
 from client.api import delete_file, download_file, list_files, upload_file
-from client.notes import describe_upload_outcome
+from client.notes import describe_upload_outcome, format_updated_at
 from client.sync_state import clear_state, read_base_version, write_state
 
 DEFAULT_GATEWAY = "http://localhost:8080"
@@ -41,7 +41,7 @@ def main() -> None:
         if not notes:
             print("no notes on the server yet")
         for note in notes:
-            print(f"{note['name']}\tv{note['version']}\t{note['updated_at']} UTC")
+            print(f"{note['name']}\tv{note['version']}\t{format_updated_at(note['updated_at'])}")
     elif args.command == "download":
         result = download_file(args.gateway, args.name)
         if args.out:

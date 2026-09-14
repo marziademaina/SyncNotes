@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from datetime import datetime, tzinfo
 from pathlib import Path
 
 import requests
@@ -119,6 +120,16 @@ def describe_create_outcome(name: str, result: dict) -> str:
         f"'{name}' already existed on the server (version {result['version']}) - "
         f"nothing was created, open it instead"
     )
+
+
+def format_updated_at(raw: str, tz: tzinfo | None = None) -> str:
+    try:
+        dt = datetime.fromisoformat(raw)
+    except ValueError:
+        return f"{raw} UTC"
+    local = dt.astimezone(tz)
+    offset = local.strftime("%z") or "+0000"
+    return f"{local.strftime('%Y-%m-%d')} T: {local.strftime('%H:%M:%S')}{offset[:3]}:{offset[3:]}"
 
 
 def describe_upload_outcome(base_version: int | None, submitted_content: str, result: dict) -> str:
