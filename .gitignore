@@ -13,3 +13,5 @@ data/
 .*.syncnotes.json
 
 docs/
+docs/project_rules.txt
+docs/propose.txt
