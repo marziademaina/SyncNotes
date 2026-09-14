@@ -54,6 +54,7 @@ def main(gateway: str = DEFAULT_GATEWAY, sync_dir: Path | str = DEFAULT_SYNC_DIR
 def _run(stdscr, gateway: str, sync_dir: Path, user: str) -> None:
     curses.curs_set(0)
     selected = 0
+    offset = 0
     notes, status = _reload(gateway)
     live = _LiveNotes(notes)
 
@@ -86,8 +87,11 @@ def _run(stdscr, gateway: str, sync_dir: Path, user: str) -> None:
         if bg_status:
             status = bg_status
 
+        visible_rows = max(max_y - 7, 0)
+        offset = _scroll_offset(selected, offset, visible_rows, len(notes))
+
         try:
-            _draw_menu(stdscr, gateway, user, notes, selected, status)
+            _draw_menu(stdscr, gateway, user, notes, selected, offset, status)
             key = stdscr.getch()
         except curses.error:
             continue
@@ -293,7 +297,19 @@ def _format_updated_at(raw: str) -> str:
     return f"{dt.strftime('%Y-%m-%d')} T: {dt.strftime('%H:%M:%S')}+00:00"
 
 
-def _draw_menu(stdscr, gateway: str, user: str, notes: list[dict], selected: int, status: str) -> None:
+def _scroll_offset(selected: int, offset: int, visible_rows: int, total: int) -> int:
+    """Slide the list's scroll offset so the selected row stays visible."""
+    if visible_rows <= 0 or total <= 0:
+        return 0
+    offset = min(offset, max(total - visible_rows, 0))
+    if selected < offset:
+        offset = selected
+    elif selected >= offset + visible_rows:
+        offset = selected - visible_rows + 1
+    return max(offset, 0)
+
+
+def _draw_menu(stdscr, gateway: str, user: str, notes: list[dict], selected: int, offset: int, status: str) -> None:
     stdscr.erase()
     max_y, max_x = stdscr.getmaxyx()
     _safe_addstr(stdscr, 0, 0, "SyncNotes", curses.A_BOLD)
@@ -304,13 +320,21 @@ def _draw_menu(stdscr, gateway: str, user: str, notes: list[dict], selected: int
     if not notes:
         _safe_addstr(stdscr, 3, 2, "(no notes yet - press 'n' to create one)")
     else:
-        for i, note in enumerate(notes):
+        if offset > 0:
+            _safe_addstr(stdscr, 2, 2, f"^ {offset} more above", curses.A_DIM)
+        shown = 0
+        for i, note in enumerate(notes[offset:]):
             row = 3 + i
             if row >= max_y - 4:
                 break
+            idx = offset + i
             line = f"{note['name']:<30} v{note['version']:<4} updated {_format_updated_at(note['updated_at'])}"
-            attr = curses.A_REVERSE if i == selected else curses.A_NORMAL
+            attr = curses.A_REVERSE if idx == selected else curses.A_NORMAL
             _safe_addstr(stdscr, row, 2, line, attr)
+            shown += 1
+        below = len(notes) - offset - shown
+        if below > 0:
+            _safe_addstr(stdscr, max_y - 4, 2, f"v {below} more below", curses.A_DIM)
 
     footer_row = max_y - 3
     _safe_addstr(stdscr, footer_row, 0, "-" * max(max_x - 1, 0))

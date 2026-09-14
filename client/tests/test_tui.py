@@ -178,6 +178,27 @@ def test_normalize_is_idempotent_on_a_no_op_round_trip():
     assert once == twice == "hello\nworld\n"
 
 
+def test_scroll_offset_stays_put_while_selection_is_already_visible():
+    assert tui._scroll_offset(selected=2, offset=0, visible_rows=5, total=10) == 0
+
+
+def test_scroll_offset_follows_selection_past_the_bottom():
+    assert tui._scroll_offset(selected=6, offset=0, visible_rows=5, total=10) == 2
+
+
+def test_scroll_offset_follows_selection_above_the_top():
+    assert tui._scroll_offset(selected=1, offset=4, visible_rows=5, total=10) == 1
+
+
+def test_scroll_offset_clamps_when_the_list_shrinks_below_the_old_offset():
+    assert tui._scroll_offset(selected=0, offset=7, visible_rows=5, total=8) == 0
+
+
+def test_scroll_offset_is_zero_for_an_empty_list_or_no_room():
+    assert tui._scroll_offset(selected=0, offset=3, visible_rows=5, total=0) == 0
+    assert tui._scroll_offset(selected=0, offset=3, visible_rows=0, total=10) == 0
+
+
 def test_live_notes_starts_with_the_given_list_and_no_pending_status():
     live = tui._LiveNotes([{"name": "a.md", "version": 1}])
     assert live.notes() == [{"name": "a.md", "version": 1}]
