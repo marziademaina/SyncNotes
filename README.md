@@ -23,6 +23,10 @@ Docker Desktop (or an equivalent running daemon) must already be started
 before any `docker compose` command below, otherwise the first one fails
 immediately with `Cannot connect to the Docker daemon`.
 
+Every terminal below needs to be `cd`-ed into the `SyncNotes/` directory
+(the one with `docker-compose.yml` in it) separately, it is not shared
+across terminals.
+
 ## Quick start
 
 ```bash
@@ -34,24 +38,35 @@ cd SyncNotes
 needed here, everything runs inside the containers):
 
 ```bash
-docker compose up --build -d           # build images, start detached
-docker compose logs -f                 # follow logs (Ctrl+C to stop following)
-curl -s http://localhost:8080/health   # {"status":"ok", "leader": "..."}
+cd SyncNotes
+docker compose up --build -d
+docker compose logs -f
 ```
 
-Expect three replicas to elect a leader within a few seconds (`raft state:`
-and `cluster: ... leader=... quorum=True peers=2/2` log lines) and the
-gateway to answer on `:8080`.
-
-**Terminal 2**: also from the repository root, once the cluster above is
-up (separate venv from the containers, since the client has its own,
-smaller set of dependencies):
+The first line builds the images and starts everything detached; the
+second follows the logs so you can watch the leader election (`raft
+state:` and `cluster: ... leader=... quorum=True peers=2/2` lines).
+`Ctrl+C` stops following without stopping the cluster. Then check the
+gateway is answering:
 
 ```bash
+curl -s http://localhost:8080/health
+```
+
+which should print something like `{"status":"ok","leader":"..."}`.
+
+**Terminal 2**: a new terminal, `cd`-ed into the same `SyncNotes/`
+directory, once the cluster above is up (its own venv, separate from the
+containers, since the client has its own, smaller set of dependencies):
+
+```bash
+cd SyncNotes
 python3 -m venv venv && source venv/bin/activate
 pip install -r client/requirements.txt
-python3 syncnotes.py                   # launches the full-screen note browser (F7)
+python3 syncnotes.py
 ```
+
+That last line launches the full-screen note browser (F7).
 
 On later runs, just `source venv/bin/activate && python3 syncnotes.py`, no
 need to reinstall unless dependencies changed.
@@ -78,6 +93,7 @@ concurrently-edited line was dropped).
 from the one above):
 
 ```bash
+cd SyncNotes
 python3 -m venv venv && source venv/bin/activate
 pip install -r server/requirements-dev.txt -r client/requirements-dev.txt
 cd server  && python -m pytest
@@ -88,33 +104,41 @@ cd ../client  && python -m pytest
 ## Live demo (with the TUI)
 
 To watch the cluster converge live while actually using the app, open a
-third terminal next to the two from Quick start, once the cluster is up:
+third terminal next to the two from Quick start, `cd`-ed into `SyncNotes/`,
+once the cluster is up (no venv needed here):
 
 ```bash
-python3 scripts/inspect_db.py --watch   # no venv needed, re-dumps every 1.5s
+cd SyncNotes
+python3 scripts/inspect_db.py --watch
 ```
 
-Leave it running. Now use the TUI in Terminal 2 (create a note with `n`,
-edit and save with `Ctrl+G`, delete with `d`): each action shows up in this
-third terminal as the three replicas' rows update, so you can see the same
-write land on `server-1`, `server-2` and `server-3` in real time.
+This re-dumps all three replicas' rows every 1.5s. Leave it running.
+
+Now use the TUI in Terminal 2 (create a note with `n`, edit and save with
+`Ctrl+G`, delete with `d`): each action shows up in this third terminal as
+the three replicas' rows update, so you can see the same write land on
+`server-1`, `server-2` and `server-3` in real time.
 
 ## Chaos scenarios and scripted demo
 
-With the client venv active, from the repository root: each script brings
-up its own clean cluster with `docker compose up --build`, tears it down
-with `docker compose down -v`, and exits non-zero on the first failure.
-These drive the client headlessly (no TUI involved) to script a scenario
-end to end:
+With the client venv active (Terminal 2's), `cd`-ed into `SyncNotes/`: each
+script brings up its own clean cluster with `docker compose up --build`,
+tears it down with `docker compose down -v`, and exits non-zero on the
+first failure. These drive the client headlessly (no TUI involved) to
+script a scenario end to end:
 
 ```bash
-python3 scripts/demo_collaborative_edit.py   # ordinary use case, no faults injected
+cd SyncNotes
+python3 scripts/demo_collaborative_edit.py
 python3 scripts/chaos_kill_leader.py
 python3 scripts/chaos_network_partition.py
 python3 scripts/chaos_restart_node.py
 python3 scripts/chaos_corruption.py
 python3 scripts/chaos_delete_converges.py
 ```
+
+`demo_collaborative_edit.py` is the ordinary use case, no faults injected;
+the `chaos_*` ones each inject one specific fault and assert recovery.
 
 ## Project layout
 
