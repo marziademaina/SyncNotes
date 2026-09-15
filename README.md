@@ -85,11 +85,27 @@ cd ../gateway && python -m pytest
 cd ../client  && python -m pytest
 ```
 
-## Chaos scenarios and demo
+## Live demo (with the TUI)
+
+To watch the cluster converge live while actually using the app, open a
+third terminal next to the two from Quick start, once the cluster is up:
+
+```bash
+python3 scripts/inspect_db.py --watch   # no venv needed, re-dumps every 1.5s
+```
+
+Leave it running. Now use the TUI in Terminal 2 (create a note with `n`,
+edit and save with `Ctrl+G`, delete with `d`): each action shows up in this
+third terminal as the three replicas' rows update, so you can see the same
+write land on `server-1`, `server-2` and `server-3` in real time.
+
+## Chaos scenarios and scripted demo
 
 With the client venv active, from the repository root: each script brings
 up its own clean cluster with `docker compose up --build`, tears it down
-with `docker compose down -v`, and exits non-zero on the first failure:
+with `docker compose down -v`, and exits non-zero on the first failure.
+These drive the client headlessly (no TUI involved) to script a scenario
+end to end:
 
 ```bash
 python3 scripts/demo_collaborative_edit.py   # ordinary use case, no faults injected
@@ -98,7 +114,6 @@ python3 scripts/chaos_network_partition.py
 python3 scripts/chaos_restart_node.py
 python3 scripts/chaos_corruption.py
 python3 scripts/chaos_delete_converges.py
-python3 scripts/inspect_db.py                # dump the three replicas' databases side by side
 ```
 
 ## Project layout
