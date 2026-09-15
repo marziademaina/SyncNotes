@@ -20,7 +20,7 @@ names or file paths to operate.
 | Python | 3.12+ | Runs the client and the chaos/demo scripts on the host |
 
 Docker Desktop (or an equivalent running daemon) must already be started
-before any `docker compose` command below — otherwise the first one fails
+before any `docker compose` command below, otherwise the first one fails
 immediately with `Cannot connect to the Docker daemon`.
 
 ## Quick start
@@ -30,7 +30,7 @@ git clone https://github.com/marziademaina/SyncNotes.git
 cd SyncNotes
 ```
 
-**Terminal 1** — repository root, brings up the cluster + gateway (no venv
+**Terminal 1**: repository root, brings up the cluster + gateway (no venv
 needed here, everything runs inside the containers):
 
 ```bash
@@ -43,7 +43,7 @@ Expect three replicas to elect a leader within a few seconds (`raft state:`
 and `cluster: ... leader=... quorum=True peers=2/2` log lines) and the
 gateway to answer on `:8080`.
 
-**Terminal 2** — also from the repository root, once the cluster above is
+**Terminal 2**: also from the repository root, once the cluster above is
 up (separate venv from the containers, since the client has its own,
 smaller set of dependencies):
 
@@ -53,7 +53,7 @@ pip install -r client/requirements.txt
 python3 syncnotes.py                   # launches the full-screen note browser (F7)
 ```
 
-On later runs, just `source venv/bin/activate && python3 syncnotes.py` — no
+On later runs, just `source venv/bin/activate && python3 syncnotes.py`, no
 need to reinstall unless dependencies changed.
 
 ## Using the app
@@ -87,7 +87,7 @@ cd ../client  && python -m pytest
 
 ## Chaos scenarios and demo
 
-With the client venv active, from the repository root — each script brings
+With the client venv active, from the repository root: each script brings
 up its own clean cluster with `docker compose up --build`, tears it down
 with `docker compose down -v`, and exits non-zero on the first failure:
 
